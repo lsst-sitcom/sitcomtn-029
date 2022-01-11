@@ -1,0 +1,9 @@
+% bibentry template for lsst.bib in https://github.com/lsst/lsst-texmf/blob/main/texmf/bibtex/bib/lsst.bib
+
+@DocuShare{SITCOMTN-029,
+   author = { Patrick Ingraham },
+    title = {LATISS Filter Change Procedure},
+     year = 2022,
+    month = Jan,
+   handle = {SITCOMTN-029},
+      url = {https://sitcomtn-029.lsst.io } }
