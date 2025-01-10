@@ -1,3 +1,12 @@
+##############################
+LATISS Filter Change Procedure
+##############################
+
+.. abstract::
+
+This document explains the required procedures when replacing or adding a *new*, previously uninstalled, filter or grating to LATISS.
+These steps are required before any data is taken, in order to guarantee the data is correctly handled by the acquisition and ingestion system.
+
 ..
   Technote content.
 
@@ -36,70 +45,80 @@
 
    Feel free to delete this instructional comment.
 
-:tocdepth: 1
 
-.. Please do not modify tocdepth; will be fixed when a new Sphinx theme is shipped.
 
-.. sectnum::
 
 
 
 Introduction
 ============
 
-Adding a filter or disperser to LATISS is a multi-step procedure that spans the DM and T&S subsystems.
-This technote is a list of things to do in order to have the data be taken with the correct metadata, as well as what it takes to get the files ingested on the summit.
+Replacing a filter or disperser in LATISS requires a few steps to ensure that the instrument is properly configured and that data ingestion is working correctly.
+When adding a new, previously uninstalled filter or disperser, there are a few additional steps that span both DM and T&S subsystems.
+Some of these steps may take some time to be ready to be rolled out to the summit and should be done well in advance to prevent delaying operations
 
 .. important::
 
-   The most time critical step is updating filters.py (see below) and having it be built in a regular weekly that is accessible from the summit environment.
+   When adding a new, previously uninstalled filter, the most time critical step is updating the `filters definition file <https://github.com/lsst/obs_lsst/blob/main/python/lsst/obs/lsst/filters.py>`_ (see below) and having it be built in a regular weekly that is accessible from the summit environment.
    The DM weeklies are built on Wednesday nights and are generally available Thursday morning, the T&S container then builds on top of that, adding several hours.
    Performing last-minute filter additions is high risk and puts strain on personnel. 
    Therefore, any new filter or grating names should be added as early as possible, preferably weeks in advance.
-
-.. note::
-
-   A future update to this technote will include the steps required to ingest the data at USDF.
-
 
 
 Procedure
 =========
 
-1. Make a ticket on the SUMMIT project that dictates which filter should be removed and which should be added.
+#. Make a ticket on the SUMMIT project that dictates which filter should be removed and which should be added.
    Use a previous ticket as a reference. 
    Roberto Tighe and Mario Rivera are trained in performing the physical filter change.
 
-2. Create a DM ticket (Team = Telescope and Site) to update the config file in the `ts_config_latiss <https://github.com/lsst-ts/ts_config_latiss>`_ repository.
-   Follow the TSSW development process.
-   Never change the names of filters.
-   Update the name and any focus offsets. 
-   Use the previous configs as the reference for the correct values.
+#. Create a DM ticket (Team = Telescope and Site) to update the config file in the `ts_config_latiss <https://github.com/lsst-ts/ts_config_latiss>`_ repository.
+   Use the previous configs as the reference for the correct values of filter names and focus offsets. 
+   Follow the `TSSW development process <https://tssw-developer.lsst.io/work_management/development_workflow.html#development-workflow-release-process>`_ to tag and release a new version of the `ts_config_latiss <https://github.com/lsst-ts/ts_config_latiss>`_ package once the changes are merged.
 
-3. After the filter is installed, and before taking any images, update the CSC to use the tag (or branch) containing the new config.
+#. If you are installing a new, previously unused filter, you will also need to open a PR to update the the `filters definition file <https://github.com/lsst/obs_lsst/blob/main/python/lsst/obs/lsst/filters.py>`_. 
+   Follow the DM development process of making a ticket, making the change, running the CI tests, and getting it reviewed and merged. 
+   The changes will be available in the next DM weekly.
+   If you are installing a known filter, you can skip directly to step 10.
+
+#. Using the new DM weekly with the changes to the `filters definition file <https://github.com/lsst/obs_lsst/blob/main/python/lsst/obs/lsst/filters.py>`_, register the new filter definitions in all of the different standard butler repositories using the command below. 
+   Note that $OODS_REPO_PATH needs to be replaced with the appropriate path depending on where you are running the command. 
+
+   .. code-block:: bash
+
+    butler register-instrument $OODS_REPO_PATH lsst.obs.lsst.Latiss
+
+   Currently, the repo paths are:
+
+   - **At USDF**: /repo/embargo and /repo/main
+   - **At Summit**: /repo/LATISS
+   - **At BTS**: /repo/LATISS
+   - **At TTS**: /repo/LATISS
+
+#. Update the cycle build. Change the weekly version of summit_utils, summit_extras, atmospec, spectractor, lsst-sqre to use the new DM weekly.
+
+#. Rebuild the following containers using the `current cycle build on jenkins <https://ts-cycle-build.lsst.io/user-guide/user-guide.html#fig-jenkins-build-with-parameters>`_
+
+   - deploy_lsstsqre
+   - build_scriptqueue
+   - rapid_analysis
+   - build-sciplat
+   - build-sciplat-recommended
+   - build-oods
+
+#. Once the container builds are complete, redeploy the ATOODS container and rubinTV pods. 
+
+#. The USDF embargo Butler auto ingestion service must also be restarted with the appropriate weekly, after registering the instrument in the embargo Butler repo (and also the main Butler repo).
+
+#. After the filter is physically installed, and before taking any images, update the ATSpecgtrograph CSC to use the tag (or branch) containing the new config.
    This needs to be done either inside the container (temporary) or by updating the cycle.env file, then rebuilding and redeploying the ATSpectrograph CSC (which is the proper way). 
 
-4. Check that the filter is in the `filters.py file of obs_lsst <https://github.com/lsst/obs_lsst/blob/main/python/lsst/obs/lsst/filters.py>`_.
-   If not, follow the DM development process of making a ticket, making the change, running the CI tests, and getting it reviewed and merged.
-   The changes will be available in the next weekly.
+#. Once the new version of the ATSpectrograph CSC is deployed you are ready to enable the spectrograph and take a few test images with the new configuration.
 
-5. Update the OODS container to use the new ``obs_lsst`` that contains the changes (if not done by a cycle deployment).
+#. During the filter change process, it is possible the grating stage itself was moved out of its nominal position, so be sure to start by running the `latiss checkout procedure <https://obs-ops.lsst.io/AuxTel/Standard-Operations/Daytime-Operations/Daytime-Checkout.html#auxtel-daytime-checkout-latiss-checkout-py>`_ to check the position of this stage.		
 
-6.	Once everything built and deployed, the butler needs to have the registry updated to say the filter exists. So each butler repo (on each instance such as the test stands) need to run the following from the command line wherever the new ``obs_lsst`` is installed. At the summit, this can be done from inside a Nublado instance (and probably the other places too). Note that $OODS_REPO_PATH needs to be populated or replaced. On the summit it is ``/repo/LATISS``
-
-   .. code-block::
-
-		butler register-instrument $OODS_REPO_PATH lsst.obs.lsst.Latiss
-		
-7. The USDF embargo Butler auto ingestion service must also be restarted with the appropriate weekly, after registering the instrument in the embargo Butler repo (and also the main Butler repo).
-
-8. Start taking images with the new filter and/or grating and verify ingestion works and that images appear on RubinTV.
-		
-
-
-
-
-
+#. Check that the images are properly ingested in RubinTV by looking for the filter and grating and ensure that the values are correct. 
+   If the values for filter and grating are correct, you are finished. 
 
 .. Add content here.
 .. Do not include the document title (it's automatically added from metadata.yaml).
